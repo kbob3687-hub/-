@@ -1,3 +1,4 @@
+import { guardedModelCall, SubmissionLimitError } from "./submission-guard";
 /** Public submissions are reviewed on the server; failure never means approval. */
 export type ReviewDecision = "allow" | "safety" | "theme" | "unavailable";
 export type ReviewResult = { decision: ReviewDecision; message: string };
@@ -46,7 +47,7 @@ export async function reviewSubmission(input: ReviewInput): Promise<ReviewResult
     const content = input.imageUrl
       ? [{ type: "text", text }, { type: "image_url", image_url: { url: input.imageUrl } }]
       : [{ type: "text", text }];
-    const response = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+    const response = await guardedModelCall(() => fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({
@@ -57,12 +58,15 @@ export async function reviewSubmission(input: ReviewInput): Promise<ReviewResult
       }),
       signal: AbortSignal.timeout(20000),
       cache: "no-store",
-    });
+    }));
     if (!response.ok) return reviewResult("unavailable");
     const payload: unknown = await response.json();
     const envelope = payload as { choices?: { message?: { content?: unknown } }[] } | null;
     return parseReview(envelope?.choices?.[0]?.message?.content);
-  } catch { return reviewResult("unavailable"); }
+  } catch (error) {
+    if (error instanceof SubmissionLimitError) throw error;
+    return reviewResult("unavailable");
+  }
 }
 
 export function reviewResponse(result: ReviewResult): Response | null {

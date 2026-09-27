@@ -4,3 +4,6 @@ node_modules
 data/artifacts.json
 *.tsbuildinfo
 .idea/
+
+data/model-budget.json
+data/model-budget.json.*.tmp

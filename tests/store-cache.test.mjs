@@ -11,11 +11,11 @@ test("catalogue cache refreshes after a submission and external replacement", as
   // No write touches the development server's catalogue.
   const directory = await mkdtemp(join(tmpdir(), "museum-store-cache-"));
   try {
-    for (const name of ["artifact", "store"]) {
+    for (const name of ["artifact", "submission-guard", "store"]) {
       const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
       const compiled = ts.transpileModule(source, {
         compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-      }).outputText.replace('"@/lib/artifact"', '"./artifact.mjs"');
+      }).outputText.replace('"@/lib/artifact"', '"./artifact.mjs"').replace('"@/lib/submission-guard"', '"./submission-guard.mjs"');
       await writeFile(join(directory, `${name}.mjs`), compiled);
     }
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", `

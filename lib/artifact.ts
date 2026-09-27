@@ -25,6 +25,8 @@ export interface Artifact {
   appraisalConclusion: string;
   imageUrl?: string;
   reflection?: string;
+  /** Internal retry identity, omitted from the public catalogue. */
+  submissionKey?: string;
 }
 
 export type ArtifactDraft = Pick<Artifact, "title" | "tag" | "desc" | "cot" | "metrics" | "appraisalConclusion" | "imageUrl" | "isPublic">;

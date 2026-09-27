@@ -1,3 +1,4 @@
+import { readSubmissionJSON, limitResponse } from "@/lib/submission-guard";
 import { appraise } from "@/lib/appraisal";
 import { reviewSubmission, reviewResponse } from "@/lib/submission-review";
 import { isArchiveImage } from "@/lib/image-policy";
@@ -6,7 +7,9 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const value = await readSubmissionJSON(request);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return Response.json({ error: "投稿格式不正确。" }, { status: 400 });
+    const body = value as Record<string, unknown>;
     const desc = typeof body.desc === "string" ? body.desc.trim() : "";
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const imageUrl = typeof body.imageUrl === "string" ? body.imageUrl : undefined;
@@ -20,7 +23,9 @@ export async function POST(request: Request) {
     if (rejection) return rejection;
     const result = await appraise({ desc, title, imageUrl, isPublic: body.isPublic !== false });
     return Response.json(result);
-  } catch {
+  } catch (error) {
+    const limited = limitResponse(error);
+    if (limited) return limited;
     return Response.json({ error: "入藏鉴定暂时中断，请重试。" }, { status: 500 });
   }
 }

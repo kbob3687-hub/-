@@ -1,3 +1,4 @@
+import { positiveLimit, SubmissionLimitError } from "@/lib/submission-guard";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -22,7 +23,7 @@ export async function readPublicArtifactSnapshot(): Promise<PublicSnapshot> {
   // Atomic replacement and external edits both invalidate this snapshot.
   if (publicCache?.revision === revision) return publicCache.snapshot;
   const snapshot = readArtifacts().then(artifacts => {
-    const body = JSON.stringify({ artifacts: artifacts.filter(item => item.isPublic) });
+    const body = JSON.stringify({ artifacts: artifacts.filter(item => item.isPublic).map(({ submissionKey: _key, ...item }) => item) });
     const etag = `W/"${createHash("sha256").update(body).digest("hex")}"`;
     return { body, etag };
   });
@@ -48,18 +49,33 @@ export async function readArtifacts(): Promise<Artifact[]> {
   }
 }
 
-export async function saveArtifact(draft: ArtifactDraft): Promise<Artifact> {
+export function assertArchiveCapacity(draft: ArtifactDraft, existing: Artifact[]): void {
+  const submissions = existing.filter(item => !seedIds.has(item.id));
+  if (submissions.length >= positiveLimit("SUBMISSION_ARCHIVE_MAX_COUNT", 5000) ||
+      Buffer.byteLength(JSON.stringify([draft, ...submissions], null, 2)) > positiveLimit("SUBMISSION_ARCHIVE_MAX_BYTES", 100 * 1024 * 1024)) {
+    throw new SubmissionLimitError(507, "展厅存储空间暂时已满，尚未入库，请稍后再试。");
+  }
+}
+
+export async function saveArtifact(draft: ArtifactDraft, submissionKey?: string): Promise<Artifact> {
   const task = writeQueue.then(async () => {
     const existing = await readArtifacts();
+    const duplicate = submissionKey && existing.find(item => item.submissionKey === submissionKey);
+    if (duplicate) return duplicate;
     const maxSequence = existing.reduce((max, item) => {
       const match = item.id.match(/№(\d+)$/);
       return Math.max(max, match ? Number(match[1]) : 0);
     }, 0);
     const artifact = makeArtifact(draft, maxSequence + 1);
+    if (submissionKey) artifact.submissionKey = submissionKey;
     await mkdir(path.dirname(dataPath), { recursive: true });
     const tempPath = `${dataPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
     const submissions = existing.filter((item) => !seedIds.has(item.id));
-    await writeFile(tempPath, JSON.stringify([artifact, ...submissions], null, 2), "utf8");
+    const body = JSON.stringify([artifact, ...submissions], null, 2);
+    if (submissions.length >= positiveLimit("SUBMISSION_ARCHIVE_MAX_COUNT", 5000) || Buffer.byteLength(body) > positiveLimit("SUBMISSION_ARCHIVE_MAX_BYTES", 100 * 1024 * 1024)) {
+      throw new SubmissionLimitError(507, "展厅存储空间暂时已满，尚未入库，请稍后再试。");
+    }
+    await writeFile(tempPath, body, "utf8");
     await rename(tempPath, dataPath);
     return artifact;
   });

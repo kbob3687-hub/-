@@ -1,6 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseReview, reviewSubmission, reviewResponse } from "../lib/submission-review.ts";
+import { after } from "node:test";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import ts from "typescript";
+const originalDirectory = process.cwd();
+const directory = await mkdtemp(join(tmpdir(), "museum-review-"));
+for (const name of ["submission-guard", "submission-review"]) {
+  const source = await readFile(new URL(`../lib/${name}.ts`, import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText.replace('"./submission-guard"', '"./submission-guard.mjs"');
+  await writeFile(join(directory, `${name}.mjs`), compiled);
+}
+process.chdir(directory);
+after(async () => { process.chdir(originalDirectory); await rm(directory, { recursive: true, force: true }); });
+const { parseReview, reviewSubmission, reviewResponse } = await import(pathToFileURL(join(directory, "submission-review.mjs")));
 
 test("review distinguishes theme and safety, and fails closed on ambiguity", () => {
   assert.equal(parseReview('{"safety":"allow","theme":"allow"}').decision, "allow");

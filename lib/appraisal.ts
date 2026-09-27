@@ -1,3 +1,4 @@
+import { guardedModelCall, SubmissionLimitError } from "@/lib/submission-guard";
 import { ArtifactDraft, isArtifactTag } from "@/lib/artifact";
 import { AppraisalInput, offlineAppraisal } from "@/lib/offline-appraisal";
 
@@ -9,7 +10,7 @@ export async function appraise(input: AppraisalInput): Promise<{ draft: Artifact
 
   try {
     const base = (process.env.AI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    const response = await fetch(`${base}/chat/completions`, {
+    const response = await guardedModelCall(() => fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -30,7 +31,7 @@ export async function appraise(input: AppraisalInput): Promise<{ draft: Artifact
         ],
       }),
       signal: AbortSignal.timeout(30000),
-    });
+    }));
     if (!response.ok) throw new Error(`Model returned ${response.status}`);
     const payload = await response.json();
     const content = payload?.choices?.[0]?.message?.content;
@@ -49,7 +50,8 @@ export async function appraise(input: AppraisalInput): Promise<{ draft: Artifact
       },
       source: "ai",
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof SubmissionLimitError) throw error;
     return { draft: fallback, source: "offline" };
   }
 }

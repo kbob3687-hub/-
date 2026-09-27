@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
+import { readSubmissionJSON, limitResponse, singleSubmission } from "@/lib/submission-guard";
 import { ArtifactDraft, isArtifactTag } from "@/lib/artifact";
-import { readPublicArtifactSnapshot, saveArtifact } from "@/lib/store";
+import { readPublicArtifactSnapshot, readArtifacts, saveArtifact, assertArchiveCapacity } from "@/lib/store";
 import { matchesIfNoneMatch } from "@/lib/http-etag";
 import { isArchiveImage } from "@/lib/image-policy";
 import { reviewSubmission, reviewResponse } from "@/lib/submission-review";
@@ -22,7 +24,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const draft = (await request.json()) as ArtifactDraft | null;
+    const draft = (await readSubmissionJSON(request)) as ArtifactDraft | null;
     if (
       !draft ||
       draft.isPublic !== true ||
@@ -36,13 +38,6 @@ export async function POST(request: Request) {
     ) {
       return Response.json({ error: "馆藏内容不符合入库格式。" }, { status: 400 });
     }
-    // Recheck the exact material being published, including client-edited captions.
-    // A successful appraisal is never authorization to bypass this final gate.
-    const rejection = reviewResponse(await reviewSubmission({
-      desc: draft.desc, title: draft.title, imageUrl: draft.imageUrl,
-      exhibitionText: [...draft.cot, draft.appraisalConclusion, draft.tag, draft.metrics.gdpContribution, draft.metrics.entropyIncrease],
-    }));
-    if (rejection) return rejection;
     // Persist only reviewed fields; never retain arbitrary client-supplied extras.
     const cleanDraft: ArtifactDraft = {
       desc: draft.desc, title: draft.title, tag: draft.tag, cot: draft.cot,
@@ -50,9 +45,32 @@ export async function POST(request: Request) {
       metrics: { gdpContribution: draft.metrics.gdpContribution, entropyIncrease: draft.metrics.entropyIncrease },
       imageUrl: draft.imageUrl, isPublic: true,
     };
-    const artifact = await saveArtifact(cleanDraft);
-    return Response.json({ artifact }, { status: 201 });
-  } catch {
+    const requestKey = request.headers.get("Idempotency-Key") ?? "legacy";
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(requestKey)) return Response.json({ error: "投稿凭据格式不正确。" }, { status: 400 });
+    // Bind retry identity to the reviewed fields; changed content never reuses approval.
+    const key = createHash("sha256").update(requestKey).update(JSON.stringify(cleanDraft)).digest("hex");
+    return await singleSubmission(key, async () => {
+      const catalogue = await readArtifacts();
+      const existing = catalogue.find(item => item.submissionKey === key);
+      if (existing) {
+        const { submissionKey: _key, ...artifact } = existing;
+        return Response.json({ artifact }, { status: 200 });
+      }
+      assertArchiveCapacity(cleanDraft, catalogue);
+      // Recheck the exact material being published, including client-edited captions.
+      // A successful appraisal is never authorization to bypass this final gate.
+      const rejection = reviewResponse(await reviewSubmission({
+        desc: draft.desc, title: draft.title, imageUrl: draft.imageUrl,
+        exhibitionText: [...draft.cot, draft.appraisalConclusion, draft.tag, draft.metrics.gdpContribution, draft.metrics.entropyIncrease],
+      }));
+      if (rejection) return rejection;
+      const saved = await saveArtifact(cleanDraft, key);
+      const { submissionKey: _key, ...artifact } = saved;
+      return Response.json({ artifact }, { status: 201 });
+    });
+  } catch (error) {
+    const limited = limitResponse(error);
+    if (limited) return limited;
     return Response.json({ error: "入库失败，请重试。" }, { status: 500 });
   }
 }

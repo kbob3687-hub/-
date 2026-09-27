@@ -9,6 +9,7 @@ import ArchivalTicket from "@/components/ArchivalTicket";
 import ReceiptPreview from "@/components/ReceiptPreview";
 import { prepareImage } from "@/lib/prepare-image";
 import { hasExhibitionDetail } from "@/lib/exhibition-catalog";
+import { createSubmissionKey } from "@/lib/submission-key";
 
 export type AppraisalFormDraft = { desc: string; title: string; isPublic: boolean; allowResonanceModel: boolean; imageUrl?: string };
 type Props = { onClose: () => void; onCreated: (artifact: Artifact) => void; onArchived: (artifact: Artifact) => void; onOpenPrivateArchive: (id: string) => void; initialDraft?: AppraisalFormDraft | null; onExploreResonance: (draft: AppraisalFormDraft) => void };
@@ -49,6 +50,7 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
   const [showOriginal, setShowOriginal] = useState(true);
   const [processingImage, setProcessingImage] = useState(false);
   const imageRequestRef = useRef(0);
+  const submissionKeyRef = useRef<string | null>(null);
   const [archiveSaved, setArchiveSaved] = useState(false);
   const [archiveError, setArchiveError] = useState("");
   const [retryingArchive, setRetryingArchive] = useState(false);
@@ -297,7 +299,7 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
       if (saved.isPublic) {
         const response = await fetch("/api/artifacts", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "Idempotency-Key": submissionKeyRef.current ??= createSubmissionKey() },
           body: JSON.stringify(pendingDraft),
         });
         const data = await response.json();
