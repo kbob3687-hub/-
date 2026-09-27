@@ -8,6 +8,7 @@ import { savePersonalArtifact } from "@/lib/private-archive";
 import ArchivalTicket from "@/components/ArchivalTicket";
 import ReceiptPreview from "@/components/ReceiptPreview";
 import { prepareImage } from "@/lib/prepare-image";
+import { hasExhibitionDetail } from "@/lib/exhibition-catalog";
 
 export type AppraisalFormDraft = { desc: string; title: string; isPublic: boolean; allowResonanceModel: boolean; imageUrl?: string };
 type Props = { onClose: () => void; onCreated: (artifact: Artifact) => void; onArchived: (artifact: Artifact) => void; onOpenPrivateArchive: (id: string) => void; initialDraft?: AppraisalFormDraft | null; onExploreResonance: (draft: AppraisalFormDraft) => void };
@@ -18,10 +19,10 @@ const PRINT_MS = 1100;
 const STAMP_MS = 700;
 const inspectionLogs = [
   "[00:00] 标本接入 / 正在核对存在痕迹……",
-  "[00:01] 生产力贡献：0.0000%。读数稳定。",
-  "[00:01] 检索可转化价值……未发现。",
-  "[00:02] 检测到一段没有产出的真实时间。",
-  "[00:02] 质检结论：完全无用，允许永久封存。",
+  "[00:01] 正在检查内容与展览主题……",
+  "[00:01] 寻找没有明确产出的生活切片……",
+  "[00:02] 不按心情好坏决定入馆资格。",
+  "[00:02] 等待检查与编目结果，请保持原状……",
 ];
 const writingPrompts = [
   { label: "没说出口的话", question: "有没有一句写了又删掉的话？" },
@@ -40,6 +41,7 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
   const [allowResonanceModel, setAllowResonanceModel] = useState(initialDraft?.allowResonanceModel ?? true);
   const [imageUrl, setImageUrl] = useState<string | undefined>(initialDraft?.imageUrl);
   const [error, setError] = useState("");
+  const [rejection, setRejection] = useState({ title: "暂不符合展览主题", message: "请换一段没有明确产出的生活切片；开心的小事也可以入馆。" });
   const [loadingStep, setLoadingStep] = useState(0);
   const [saved, setSaved] = useState<Artifact | null>(null);
   const [pendingDraft, setPendingDraft] = useState<ArtifactDraft | null>(null);
@@ -208,7 +210,10 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
     if (processingImage) return;
     setError("");
     if (desc.trim().length < 4) { setError("请至少写下 4 个字。"); return; }
-    if (isProductiveSubmission(desc)) { setStage("rejected"); return; }
+    if (!isPublic && isProductiveSubmission(desc)) {
+      setRejection({ title: "暂不符合展览主题", message: "请换一段没有明确产出的生活切片；开心的小事也可以入馆。" });
+      setStage("rejected"); return;
+    }
     void prepareAudio();
     setLoadingStep(0);
     setArchiveSaved(false);
@@ -226,7 +231,10 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
           body: JSON.stringify({ desc: desc.trim(), title: title.trim(), imageUrl, isPublic: true }),
         });
         const data = await response.json();
-        if (response.status === 422 && data.rejected) { setStage("rejected"); return; }
+        if (response.status === 422 && data.rejected) {
+          setRejection({ title: data.reason === "safety" ? "未通过公开展示审核" : "暂不符合展览主题", message: data.error });
+          setStage("rejected"); return;
+        }
         if (!response.ok) throw new Error(data.error || "鉴定失败。");
         appraisalSource = data.source;
         draft = data.draft;
@@ -293,6 +301,10 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
           body: JSON.stringify(pendingDraft),
         });
         const data = await response.json();
+        if (response.status === 422 && data.rejected) {
+          setRejection({ title: data.reason === "safety" ? "未通过公开展示审核" : "暂不符合展览主题", message: data.error });
+          setStage("rejected"); setSaving(false); return;
+        }
         if (!response.ok) throw new Error(data.error || "入库失败，请重试。");
         artifact = data.artifact;
         try {
@@ -325,8 +337,9 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
     const archiveTrigger = Array.from(document.querySelectorAll(".private-archive-trigger"))
       .map((element) => element.getBoundingClientRect())
       .find((bounds) => bounds.width > 0 && bounds.top >= 0 && bounds.bottom <= window.innerHeight);
-    const targetX = saved.isPublic ? (scene ? scene.left + scene.width * 0.76 : window.innerWidth * 0.76) : (archiveTrigger ? archiveTrigger.left + archiveTrigger.width / 2 : window.innerWidth - 58);
-    const targetY = saved.isPublic ? (scene ? scene.top + scene.height * 0.46 : window.innerHeight * 0.48) : (archiveTrigger ? archiveTrigger.top + archiveTrigger.height / 2 : window.innerHeight - 46);
+    const exhibited = saved.isPublic && hasExhibitionDetail(saved);
+    const targetX = exhibited ? (scene ? scene.left + scene.width * 0.76 : window.innerWidth * 0.76) : (archiveTrigger ? archiveTrigger.left + archiveTrigger.width / 2 : window.innerWidth - 58);
+    const targetY = exhibited ? (scene ? scene.top + scene.height * 0.46 : window.innerHeight * 0.48) : (archiveTrigger ? archiveTrigger.top + archiveTrigger.height / 2 : window.innerHeight - 46);
     setExportUrl("");
     playWhoosh();
     setFlight({ left: rect.left, top: rect.top, width: rect.width, height: rect.height, x: targetX - rect.left - rect.width / 2, y: targetY - rect.top - rect.height / 2 });
@@ -335,7 +348,7 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
       if (!aliveRef.current) return;
       if (archiveSaved && saved.isPublic) onArchived(saved);
       onClose();
-      if (!saved.isPublic) onOpenPrivateArchive(saved.id);
+      if (!exhibited && archiveSaved) onOpenPrivateArchive(saved.id);
     }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 180 : 850);
   }
 
@@ -362,7 +375,7 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
               <label className={isPublic ? "privacy-option selected" : "privacy-option"}><input type="radio" checked={isPublic} onChange={() => setIsPublic(true)} /><strong>公开常设展</strong><span>公开展示，并在我的深库保留副本</span></label>
               <label className={!isPublic ? "privacy-option selected" : "privacy-option"}><input type="radio" checked={!isPublic} onChange={() => setIsPublic(false)} /><strong>深库特藏</strong><span>本机离线编目，不上传任何内容</span></label>
             </fieldset>
-            <p className="privacy-note">{isPublic ? "公开展品会展示原话和照片。请勿填写姓名、电话或其他人的隐私信息。" : "深库特藏仅保存在此设备、此浏览器；清理浏览器数据后可能无法找回。"}</p>
+            <p className="privacy-note">{isPublic ? "公开展品会展示原话和照片，并交由审核服务检查文字与图片。请勿填写姓名、电话或其他人的隐私信息。" : "深库特藏仅保存在此设备、此浏览器，不发送至公开投稿审核服务；清理浏览器数据后可能无法找回。"}</p>
             {error && <p className="form-error" role="alert">{error}</p>}
             <button className="submit-cta" type="submit" disabled={processingImage}>{processingImage ? "照片处理中…" : "生成鉴定预览"} <span>→</span></button>
           </form>
@@ -376,15 +389,15 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
               <div className="terminal-logs">{inspectionLogs.slice(0, loadingStep + 1).map((line) => <p key={line}>{line}</p>)}<span className="terminal-cursor" aria-hidden="true">▌</span></div>
               <div className="terminal-progress"><span style={{ width: `${(loadingStep + 1) * 20}%` }} /></div>
             </div>
-            <p className="inspection-caption">请保持这件小事的原状。它已经足够无用。</p>
+            <p className="inspection-caption">{isPublic ? "正在审核文字与物证，通过后才会出票。" : "正在本机编目，这件小事不会送入公共展厅。"}</p>
           </div>
         )}
         {stage === "rejected" && (
           <div className="rejection-screen">
             <p className="form-kicker">ARCHIVE CONTROL / RED ALERT</p>
             <div className="rejection-symbol" aria-hidden="true">×</div>
-            <h2>生产行为警报</h2>
-            <p>这件事具有明确产出。请换一件完全没派上用场的小事，再来接受鉴定。</p>
+            <h2>{rejection.title}</h2>
+            <p>{rejection.message}</p>
             <button type="button" className="submit-cta" onClick={() => setStage("input")}>重新申报 <span>↶</span></button>
           </div>
         )}
@@ -395,7 +408,7 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
             <div className="receipt-feed"><ArchivalTicket ref={ticketRef} artifact={saved} source={source} stamped={stage !== "print"} showOriginal={showOriginal} preview={stage === "print" || stage === "stamp" || stage === "ready"} /></div>
             {(stage === "ready" || stage === "confirmed") && (
               <>
-                <p className="receipt-note" role="status">{stage === "confirmed" ? saved.isPublic ? archiveSaved ? "已入公共展厅，并在本机深库留存。你可以保存正式凭证。" : "已入公共展厅，但本机历史尚未保存。" : "已保存到此浏览器的私人深库。你可以保存正式凭证。" : saved.isPublic ? "请先核对原话和照片。确认封存后才会出现在公开展厅。" : "请先核对这张凭证。确认后才会保存到此浏览器的私人深库。"}</p>
+                <p className="receipt-note" role="status">{stage === "confirmed" ? saved.isPublic ? hasExhibitionDetail(saved) ? archiveSaved ? "已入公共展厅，并在本机深库留存。你可以保存正式凭证。" : "已入公共展厅，但本机历史尚未保存。" : archiveSaved ? "已公开入库，并在本机深库留存。这份概括暂不展出，可在深库查看。" : "已公开入库，这份概括暂不展出；本机历史尚未保存，请重试。" : "已保存到此浏览器的私人深库。你可以保存正式凭证。" : saved.isPublic ? "请先核对原话和照片。确认后公开入库；有具体细节的小事进入展厅与星图。" : "请先核对这张凭证。确认后才会保存到此浏览器的私人深库。"}</p>
                 {archiveError && <div role="alert"><p className="form-error">{archiveError}</p><button type="button" className="ticket-save-button" disabled={retryingArchive} onClick={retryArchive}>{retryingArchive ? "正在保存历史…" : "重试保存至我的深库"}</button></div>}
                 {error && <p className="form-error" role="alert">{error}</p>}
                 <div className="ticket-actions">
@@ -403,7 +416,7 @@ export default function AppraisalModal({ onClose, onCreated, onArchived, onOpenP
                   <button type="button" className="ticket-save-button" onClick={download}>↓ 保存凭证图片</button>
                   {stage === "ready"
                     ? <button type="button" className="submit-cta" onClick={() => void release()} disabled={saving}>{saving ? "正在封存…" : saved.isPublic ? "确认公开入库" : "确认封存至我的深库"} <span>→</span></button>
-                    : <button type="button" className="submit-cta" onClick={finish} disabled={retryingArchive}>{saved.isPublic ? "返回展厅" : "查看我的深库"} <span>→</span></button>}
+                    : <button type="button" className="submit-cta" onClick={finish} disabled={retryingArchive}>{saved.isPublic && hasExhibitionDetail(saved) ? "返回展厅" : "查看我的深库"} <span>→</span></button>}
                 </div>
               </>
             )}

@@ -220,13 +220,13 @@ export default function HomePage() {
       </div>
 
       {view === "stream"
-        ? <ArtifactStreamHero artifacts={catalog} onOpen={setSelected} onSubmit={() => setFormOpen(true)} />
+        ? <ArtifactStreamHero artifacts={catalog} onOpen={setSelected} onSubmit={() => setFormOpen(true)} paused={Boolean(selected || formOpen || archiveOpen || shareOpen)} />
         : view === "constellation"
           ? <VoidConstellation artifacts={catalog} onOpen={setSelected} arrivalId={arrivalId} playbackReady={!formOpen} />
           : <AncientResonance handoff={resonanceHandoff} onReturnToDraft={formDraft ? () => setFormOpen(true) : undefined} />}
 
       <footer className="museum-footer">
-        <div><span className="live-dot" /> <strong>展厅开放中</strong><span className="footer-divider">/</span>公开投稿 {catalog.length - sampleCount} 件 <span className="sample-note">· 展陈样本 {sampleCount} 件 · 两页共用馆藏</span></div>
+        <div><span className="live-dot" /> <strong>展厅开放中</strong><span className="footer-divider">/</span>在展投稿 {catalog.length - sampleCount} 件 <span className="sample-note">· 展陈样本 {sampleCount} 件 · 两页共用展陈</span></div>
         <div className="footer-right"><span>每一件无用之物，都有独立的编号。</span><button type="button" className="private-archive-trigger footer-archive-entry" onClick={() => openPrivateArchive()}>▤ 我的深库 {privateCount > 0 ? `· ${privateCount}` : ""}</button><button type="button" onClick={() => setShareOpen(true)}>分享入口 ↗</button></div>
       </footer>
 

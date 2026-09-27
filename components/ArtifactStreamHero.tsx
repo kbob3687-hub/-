@@ -3,43 +3,16 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Artifact, displayArtifactId } from "@/lib/artifact";
 import { burstTitleParticles } from "@/lib/title-particles";
-import { isExhibitionSample } from "@/lib/exhibition-catalog";
+import MuseumGallery from "@/components/MuseumGallery";
+import CardItem from "@/components/CardItem";
+import { EXHIBITION_BATCH_SIZE } from "@/lib/exhibition-catalog";
 
 type Props = {
   artifacts: Artifact[];
   onOpen: (artifact: Artifact) => void;
   onSubmit: () => void;
+  paused?: boolean;
 };
-
-const tracks = [
-  {
-    top: "-14%", duration: "72s", delay: "-27s", opacity: 0.48,
-    cards: [
-      { index: 1, depth: "-170px", tiltX: "-2deg", tiltY: "4deg", angle: "4deg", offset: "10px" },
-      { index: 4, depth: "-200px", tiltX: "2deg", tiltY: "-5deg", angle: "-5deg", offset: "-24px" },
-      { index: 7, depth: "-150px", tiltX: "-3deg", tiltY: "3deg", angle: "3deg", offset: "20px" },
-      { index: 2, depth: "-190px", tiltX: "2deg", tiltY: "-4deg", angle: "-4deg", offset: "-14px" },
-    ],
-  },
-  {
-    top: "36%", duration: "58s", delay: "-13s", opacity: 0.76,
-    cards: [
-      { index: 3, depth: "-70px", tiltX: "2deg", tiltY: "-4deg", angle: "-4deg", offset: "-20px" },
-      { index: 0, depth: "-35px", tiltX: "-2deg", tiltY: "5deg", angle: "5deg", offset: "16px" },
-      { index: 6, depth: "-95px", tiltX: "3deg", tiltY: "-3deg", angle: "3deg", offset: "-10px" },
-      { index: 5, depth: "-50px", tiltX: "-2deg", tiltY: "4deg", angle: "-5deg", offset: "18px" },
-    ],
-  },
-  {
-    top: "78%", duration: "48s", delay: "-35s", opacity: 0.9,
-    cards: [
-      { index: 2, depth: "55px", tiltX: "-2deg", tiltY: "5deg", angle: "5deg", offset: "14px" },
-      { index: 7, depth: "30px", tiltX: "2deg", tiltY: "-4deg", angle: "-4deg", offset: "-18px" },
-      { index: 0, depth: "70px", tiltX: "-3deg", tiltY: "4deg", angle: "-5deg", offset: "20px" },
-      { index: 3, depth: "40px", tiltX: "2deg", tiltY: "-5deg", angle: "4deg", offset: "-12px" },
-    ],
-  },
-];
 
 const titleCharacters = Array.from("无意义博物馆");
 function scatterVectors() {
@@ -50,33 +23,8 @@ function scatterVectors() {
   });
 }
 
-function ArtifactCard({ artifact, onOpen, tabIndex }: { artifact: Artifact; onOpen: (artifact: Artifact) => void; tabIndex?: number }) {
-  return (
-    <button type="button" className={`floating-artifact ${artifact.imageUrl ? "" : "artifact-text-card"}`} onClick={() => onOpen(artifact)} aria-label={`查看馆藏 ${artifact.title}`} tabIndex={tabIndex}>
-      <span className="artifact-head"><span className="artifact-index">{displayArtifactId(artifact.id)}</span><span className="artifact-tag">{artifact.tag}</span></span>
-      {artifact.imageUrl ? <>
-        <span className="artifact-media"><img src={artifact.imageUrl} alt="" loading="lazy" /></span>
-        <span className="artifact-summary"><strong className="artifact-title">{artifact.title}</strong><span className="artifact-excerpt">{artifact.desc}</span></span>
-      </> : <span className={`artifact-text-body ${artifact.desc.length > 55 ? "is-long" : artifact.desc.length < 20 ? "is-short" : ""}`}>
-        <span className="artifact-text-label">文字标本 / ORIGINAL MOMENT</span>
-        <strong className="artifact-original">{artifact.desc}</strong>
-        <span className="artifact-text-open">查看档案 ↗</span>
-      </span>}
-      <span className="artifact-foot"><span>{isExhibitionSample(artifact.id) ? "展陈样本 / 非用户投稿" : "公开投稿 / 准予封存"}</span><span>{artifact.date}</span></span>
-      <span className="artifact-detail" aria-hidden="true">
-        <span className="artifact-detail-label">ARCHIVE / {artifact.tag}</span>
-        <strong>{artifact.title}</strong>
-        <span>{artifact.desc}</span>
-        <em>{artifact.appraisalConclusion}</em>
-        <small>查看完整档案 ↗</small>
-      </span>
-    </button>
-  );
-}
-
-export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Props) {
+export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit, paused = false }: Props) {
   const sceneRef = useRef<HTMLElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLButtonElement>(null);
   const restoreRef = useRef<HTMLButtonElement>(null);
@@ -84,12 +32,13 @@ export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Prop
   const stopParticlesRef = useRef<() => void>(() => {});
   const pickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isDispersed, setIsDispersed] = useState(false);
+  const [isTunnel, setIsTunnel] = useState(false);
   const [vectors, setVectors] = useState<CSSProperties[]>([]);
   const [batch, setBatch] = useState(0);
   const publicArtifacts = artifacts.filter((artifact, index, list) => artifact.isPublic && list.findIndex(item => item.id === artifact.id) === index);
-  const batchCount = Math.max(1, Math.ceil(publicArtifacts.length / 8));
+  const batchCount = Math.max(1, Math.ceil(publicArtifacts.length / EXHIBITION_BATCH_SIZE));
   const currentBatch = Math.min(batch, batchCount - 1);
-  const visibleArtifacts = publicArtifacts.slice(currentBatch * 8, currentBatch * 8 + 8);
+  const visibleArtifacts = publicArtifacts.slice(currentBatch * EXHIBITION_BATCH_SIZE, (currentBatch + 1) * EXHIBITION_BATCH_SIZE);
   useEffect(() => { setBatch(0); }, [artifacts[0]?.id]);
   const disperse = () => {
     stopParticlesRef.current();
@@ -119,8 +68,8 @@ export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Prop
   };
 
   useEffect(() => {
-    if (isDispersed) restoreRef.current?.focus({ preventScroll: true });
-  }, [isDispersed]);
+    if (isDispersed && !isTunnel) restoreRef.current?.focus({ preventScroll: true });
+  }, [isDispersed, isTunnel]);
   useEffect(() => () => {
     if (pickTimerRef.current) clearTimeout(pickTimerRef.current);
     stopParticlesRef.current();
@@ -128,9 +77,8 @@ export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Prop
 
   useEffect(() => {
     const scene = sceneRef.current;
-    const stage = stageRef.current;
     const hero = heroRef.current;
-    if (!scene || !stage || !hero) return;
+    if (!scene || !hero) return;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -141,7 +89,6 @@ export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Prop
     const animate = () => {
       motion.x += (motion.targetX - motion.x) * 0.085;
       motion.y += (motion.targetY - motion.y) * 0.085;
-      stage.style.transform = `translate3d(${motion.x * 38}px, ${motion.y * 16}px, 0) rotateX(${-motion.y * 3.5}deg) rotateY(${motion.x * 5}deg)`;
       hero.style.transform = `translate3d(${-motion.x * 10}px, ${-motion.y * 5}px, 0)`;
 
       if (Math.max(Math.abs(motion.targetX - motion.x), Math.abs(motion.targetY - motion.y)) > 0.001) {
@@ -164,7 +111,6 @@ export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Prop
       window.cancelAnimationFrame(frame);
       frame = 0;
       motion.x = motion.y = motion.targetX = motion.targetY = 0;
-      stage.style.transform = "";
       hero.style.transform = "";
     };
 
@@ -182,31 +128,20 @@ export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Prop
   }, []);
 
   return (
-    <section className={`stream-scene ${isDispersed ? "is-dispersed" : ""}`} aria-label="漂流展厅" ref={sceneRef}>
-      <div className="stream-perspective">
-        <div className="stream-focus">
-        <div className="stream-stage" ref={stageRef}>
-          {tracks.map((track, trackIndex) => (
-            <div className={`stream-track stream-track-${trackIndex}`} key={trackIndex} style={{ top: track.top, "--rest-opacity": track.opacity } as CSSProperties}>
-                    {visibleArtifacts.filter((_, index) => index % tracks.length === trackIndex).map((artifact, cardIndex, lane) => {
-                      const card = track.cards[cardIndex % track.cards.length];
-                      const style = {
-                        "--depth": card.depth,
-                        "--tilt-x": card.tiltX,
-                        "--tilt-y": card.tiltY,
-                        "--angle": card.angle,
-                        "--offset": card.offset,
-                      } as CSSProperties;
-                      const duration = parseFloat(track.duration);
-                      return <div className="stream-orbit" key={artifact.id} style={{ "--still-position": cardIndex, animationDuration: track.duration, animationDelay: `${-duration * ((cardIndex + .45) / lane.length)}s` } as CSSProperties}><div className="artifact-slot" style={style}><ArtifactCard artifact={artifact} onOpen={onOpen} /></div></div>;
-                    })}
-            </div>
-          ))}
-        </div>
-        </div>
-      </div>
+    <section className={`stream-scene ${isDispersed ? "is-dispersed" : ""} ${isTunnel ? "is-tunnel" : ""}`} aria-label="漂流展厅" ref={sceneRef}>
+      <MuseumGallery
+        cards={publicArtifacts.map(artifact => ({ id: artifact.id, code: displayArtifactId(artifact.id), title: artifact.title, excerpt: artifact.desc, imageUrl: artifact.imageUrl, date: artifact.date, type: artifact.tag }))}
+        floatIds={visibleArtifacts.map(artifact => artifact.id)}
+        paused={paused}
+        onOpen={card => { const artifact = publicArtifacts.find(item => item.id === card.id); if (artifact) onOpen(artifact); }}
+        renderCard={card => {
+          const artifact = publicArtifacts.find(item => item.id === card.id);
+          return <CardItem card={card} conclusion={artifact?.appraisalConclusion} onOpen={() => { if (artifact) onOpen(artifact); }} />;
+        }}
+        onModeChange={mode => { setIsTunnel(mode === "tunnel3D"); if (mode === "tunnel3D") disperse(); else restore(); }}
+      />
 
-      <div className="hero-center" ref={heroRef}>
+      <div className="hero-center" ref={heroRef} inert={isTunnel} aria-hidden={isTunnel}>
         <p className="eyebrow hero-recedes" aria-hidden={isDispersed}><span className="red-line" /> 日常小事常设展 <span className="red-line" /></p>
         <h1 aria-label="无意义博物馆"><button type="button" className="hero-title-trigger" ref={titleRef} onClick={disperse} disabled={isDispersed} aria-label="无意义博物馆，点击让标题散开查看展品"><span className="sr-only">无意义博物馆</span>{titleCharacters.map((character, index) => <span aria-hidden="true" className="hero-title-character" key={index} style={vectors[index]}>{character}</span>)}</button></h1>
         <p className="hero-english hero-recedes" aria-hidden={isDispersed}>MUSEUM OF MEANINGLESS THINGS</p>
@@ -219,12 +154,12 @@ export default function ArtifactStreamHero({ artifacts, onOpen, onSubmit }: Prop
       </div>
 
       <canvas className="hero-particles" ref={particlesRef} aria-hidden="true" />
-      {isDispersed && <button type="button" className="hero-restore" ref={restoreRef} onClick={restore}><span aria-hidden="true">↶</span> 还原标题</button>}
-      <p className="sr-only" role="status">{isDispersed ? "标题已散开，可以浏览漂浮藏品，或点击还原标题。" : "标题已聚拢。"}</p>
+      {isDispersed && !isTunnel && <button type="button" className="hero-restore" ref={restoreRef} onClick={restore}><span aria-hidden="true">↶</span> 还原标题</button>}
+      <p className="sr-only" role="status">{isTunnel ? "已进入记忆深渊，可通过返回漂流聚拢标题。" : isDispersed ? "标题已散开，可以浏览漂浮藏品，或点击还原标题。" : "标题已聚拢。"}</p>
 
-      <div className="stream-catalog-control" aria-label="浏览全部公开馆藏">
-        <span>馆藏 {publicArtifacts.length} 件 · 第 {currentBatch + 1}/{batchCount} 批</span>
-        {batchCount > 1 && <button type="button" onClick={() => setBatch((currentBatch + 1) % batchCount)}>换一批藏品 ↻</button>}
+      <div className="stream-catalog-control" aria-label="浏览当前展陈">
+        <span>{isTunnel ? `全部展陈 ${publicArtifacts.length} 件 · 滚轮穿梭浏览` : `展陈 ${publicArtifacts.length} 件 · 第 ${currentBatch + 1}/${batchCount} 批`}</span>
+        {!isTunnel && batchCount > 1 && <button type="button" onClick={() => setBatch((currentBatch + 1) % batchCount)}>换一批藏品 ↻</button>}
       </div>
       <div className="scene-coordinate scene-coordinate-left">MOM / EVERYDAY ARCHIVE</div>
       <div className="scene-coordinate scene-coordinate-right">PUBLIC ARCHIVE · IN MOTION</div>

@@ -448,3 +448,5 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .encounter-printer .paper-tear{filter:drop-shadow(0 2px 1px #0005)}
 @keyframes encounterSheetEject{0%{transform:translateY(-102%) rotateX(0deg)}18%{transform:translateY(-79%) rotateX(-1deg)}21%{transform:translateY(-79%) rotateX(-1deg)}43%{transform:translateY(-49%) rotateX(-3deg)}46%{transform:translateY(-49%) rotateX(-3deg)}68%{transform:translateY(-20%) rotateX(-7deg)}71%{transform:translateY(-20%) rotateX(-7deg)}88%{transform:translateY(0) rotateX(-8deg)}100%{transform:translateY(0) rotateX(-4deg)}}
 @media(prefers-reduced-motion:reduce){.encounter-printer .encounter-paper{animation:none;transform:none}}
+.stream-scene.is-tunnel .hero-center{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .45s,visibility .45s}
+.stream-scene.is-tunnel:before{opacity:0}

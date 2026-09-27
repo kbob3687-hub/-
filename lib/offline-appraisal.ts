@@ -25,7 +25,9 @@ const motifs: { pattern: RegExp; title: string; conclusion: string }[] = [
 ];
 
 export function isProductiveSubmission(input: string) {
-  return /(背单词|刷题|加班|赶报告|写周报|做绩效|冲业绩)/.test(input);
+  // Local-only theme hint for private records. Public decisions use server review.
+  if (/(发呆|走神|没发|未发|删掉|废弃|白等|没用上|没再|未再|算了)/.test(input)) return false;
+  return /(完成|达成|学会|赚了|实现).{0,20}(目标|任务|业绩|报告|项目|单词|题目)|教程|操作步骤|购买链接|优惠促销/.test(input);
 }
 
 export function offlineAppraisal(input: AppraisalInput): ArtifactDraft {

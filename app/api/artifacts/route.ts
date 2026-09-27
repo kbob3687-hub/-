@@ -2,6 +2,7 @@ import { ArtifactDraft, isArtifactTag } from "@/lib/artifact";
 import { readPublicArtifactSnapshot, saveArtifact } from "@/lib/store";
 import { matchesIfNoneMatch } from "@/lib/http-etag";
 import { isArchiveImage } from "@/lib/image-policy";
+import { reviewSubmission, reviewResponse } from "@/lib/submission-review";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,12 +31,26 @@ export async function POST(request: Request) {
       typeof draft.tag !== "string" || !isArtifactTag(draft.tag) ||
       !Array.isArray(draft.cot) || draft.cot.length !== 3 || draft.cot.some((step) => typeof step !== "string" || step.length > 90) ||
       typeof draft.appraisalConclusion !== "string" || draft.appraisalConclusion.length > 100 ||
-      !draft.metrics || typeof draft.metrics.gdpContribution !== "string" || typeof draft.metrics.entropyIncrease !== "string" ||
+      !draft.metrics || typeof draft.metrics.gdpContribution !== "string" || draft.metrics.gdpContribution.length > 50 || typeof draft.metrics.entropyIncrease !== "string" || draft.metrics.entropyIncrease.length > 50 ||
       (draft.imageUrl != null && !isArchiveImage(draft.imageUrl))
     ) {
       return Response.json({ error: "馆藏内容不符合入库格式。" }, { status: 400 });
     }
-    const artifact = await saveArtifact(draft);
+    // Recheck the exact material being published, including client-edited captions.
+    // A successful appraisal is never authorization to bypass this final gate.
+    const rejection = reviewResponse(await reviewSubmission({
+      desc: draft.desc, title: draft.title, imageUrl: draft.imageUrl,
+      exhibitionText: [...draft.cot, draft.appraisalConclusion, draft.tag, draft.metrics.gdpContribution, draft.metrics.entropyIncrease],
+    }));
+    if (rejection) return rejection;
+    // Persist only reviewed fields; never retain arbitrary client-supplied extras.
+    const cleanDraft: ArtifactDraft = {
+      desc: draft.desc, title: draft.title, tag: draft.tag, cot: draft.cot,
+      appraisalConclusion: draft.appraisalConclusion,
+      metrics: { gdpContribution: draft.metrics.gdpContribution, entropyIncrease: draft.metrics.entropyIncrease },
+      imageUrl: draft.imageUrl, isPublic: true,
+    };
+    const artifact = await saveArtifact(cleanDraft);
     return Response.json({ artifact }, { status: 201 });
   } catch {
     return Response.json({ error: "入库失败，请重试。" }, { status: 500 });

@@ -1,5 +1,5 @@
 import { appraise } from "@/lib/appraisal";
-import { isProductiveSubmission } from "@/lib/offline-appraisal";
+import { reviewSubmission, reviewResponse } from "@/lib/submission-review";
 import { isArchiveImage } from "@/lib/image-policy";
 
 export const runtime = "nodejs";
@@ -16,9 +16,8 @@ export async function POST(request: Request) {
     if (body.imageUrl != null && !isArchiveImage(body.imageUrl)) {
       return Response.json({ error: "照片格式或大小不符合要求。" }, { status: 400 });
     }
-    if (isProductiveSubmission(desc)) {
-      return Response.json({ error: "检测到明确的生产任务。本馆暂不收藏，请换一件没有产出的小事。", rejected: true }, { status: 422 });
-    }
+    const rejection = reviewResponse(await reviewSubmission({ desc, title, imageUrl }));
+    if (rejection) return rejection;
     const result = await appraise({ desc, title, imageUrl, isPublic: body.isPublic !== false });
     return Response.json(result);
   } catch {

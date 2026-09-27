@@ -6,6 +6,9 @@ import type { ExperienceLink } from "@/lib/resonance";
 import { isExhibitionSample } from "@/lib/exhibition-catalog";
 
 const captions: Record<string, string> = {
+  "light-pause": "都为一点缓慢移动的光影，停了一会儿。",
+  "small-care": "都给路过的小动物，留了一点吃的或喝的。",
+  "warmth-remains": "已经吃完喝完，手里还留着一点暖。",
   "prepared-unreleased": "都认真准备过，却没有交出去。",
   "saved-unopened": "都留下了入口，却没有再进去。",
   "residue-after": "事情结束了，剩下的东西还在。",
@@ -15,6 +18,9 @@ const captions: Record<string, string> = {
   "return-to-origin": "都动过一下，又回到了原处。",
 };
 const clues: Record<string, RegExp> = {
+  "light-pause": /(夕阳|树影|看着|那束光|挪了|移到)/g,
+  "small-care": /(喂猫|喂鸟|添了一碗水|面包|猫|麻雀)/g,
+  "warmth-remains": /(吃完|喝完|捏着|捧着|温热|纸袋|杯子)/g,
   "prepared-unreleased": /(写完|写了|删掉|删除|没发|废弃|作废|撤销|换回)/g,
   "saved-unopened": /(截图|收藏|保存|没看过|再没看|没打开|再没打开|忘了)/g,
   "residue-after": /(剩了|剩|没喝完|凝住|凝固|冷了)/g,

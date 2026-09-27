@@ -19,6 +19,11 @@ export default function VoidConstellation({ artifacts, onOpen, arrivalId, playba
   const graphItems = useMemo(() => graphArtifacts.map(item => ({ id: item.id, theme: classifyResonance(item) })), [graphArtifacts]);
   const allLinks = useMemo(() => createExperienceLinks(graphArtifacts), [graphArtifacts]);
   const openingLink = useMemo(() => {
+    const sunlight = graphArtifacts.find(item => shortTitle(item) === "夕阳坐过的椅子");
+    const shadow = graphArtifacts.find(item => shortTitle(item) === "树影挪了半步");
+    const gentle = sunlight && shadow && allLinks.find(link =>
+      (link.from === sunlight.id && link.to === shadow.id) || (link.to === sunlight.id && link.from === shadow.id));
+    if (gentle) return { ...gentle, from: sunlight.id, to: shadow.id };
     const unsent = graphArtifacts.find(item => shortTitle(item) === "没有按下发送");
     const erased = graphArtifacts.find(item => shortTitle(item) === "输入框里的“算了”");
     const preferred = unsent && erased && allLinks.find(link =>
@@ -242,7 +247,7 @@ export default function VoidConstellation({ artifacts, onOpen, arrivalId, playba
     <section className="constellation-scene resonance-scene" aria-label="小事星图">
       <div className="resonance-intro">
         <div><p className="resonance-eyebrow"><span /> MODE 02 / ENCOUNTERS</p><h1>这些小事，<em>偶尔会碰见彼此。</em></h1><p className="resonance-lead">{hasArrival ? "你刚留下的小事正持续闪烁。看看它遇见了什么，或拖动微光挪动这次相遇。" : "点亮一件，看看另一段经历为什么与它相似。拖动微光，也可以挪动这次相遇。"}</p></div>
-        <div className="resonance-count"><strong>{String(graphArtifacts.length).padStart(2, "0")}</strong><span>个游移节点<br />{publicArtifacts.length - sampleCount} 件公开投稿 · {sampleCount} 件展陈样本</span></div>
+        <div className="resonance-count"><strong>{String(graphArtifacts.length).padStart(2, "0")}</strong><span>个游移节点<br />{publicArtifacts.length - sampleCount} 件在展投稿 · {sampleCount} 件展陈样本</span></div>
       </div>
       <div className="resonance-layout">
         <div ref={fieldRef} className={`resonance-field living-graph ${selected ? "has-encounter" : ""} ${playing ? "is-playing-encounter" : ""}`} data-story-phase={phase} role="region" aria-label="共鸣图谱：点击节点呈现相遇；拖动单个节点或连线局部移动；方向键移动，Home 重排">

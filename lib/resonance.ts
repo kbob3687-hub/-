@@ -1,10 +1,10 @@
 import type { Artifact } from "@/lib/artifact";
 
 export const resonanceThemes = [
-  { id: "unspoken", name: "交出之前", number: "01" },
+  { id: "unspoken", name: "微小的回应", number: "01" },
   { id: "undone", name: "计划之外", number: "02" },
-  { id: "leftbehind", name: "结束以后", number: "03" },
-  { id: "pause", name: "过程中的停顿", number: "04" },
+  { id: "leftbehind", name: "留下的痕迹", number: "03" },
+  { id: "pause", name: "片刻的停留", number: "04" },
 ] as const;
 export type ResonanceThemeId = (typeof resonanceThemes)[number]["id"];
 type Evidence = { kind: string; action: string };
@@ -13,6 +13,24 @@ type Experience = {
   read: (text: string) => Evidence | null;
 };
 const experiences: Experience[] = [
+  {
+    id: "light-pause", theme: "pause", label: "为一点光影停下",
+    reason: "两段原话都写到看着光或影子移动，日常的行程里多留了一会儿。",
+    read: text => /夕阳|阳光|树影|光斑|那束光|一束光/.test(text) && /看着|盯着|停|等/.test(text)
+      ? { kind: /树影/.test(text) ? "树影" : "光线", action: "停下来，看着光或影子缓慢移动" } : null,
+  },
+  {
+    id: "small-care", theme: "unspoken", label: "给路过的它留了一点",
+    reason: "原话都记录了给小动物留下食物或水的具体动作，一件顺手的小事被看见了。",
+    read: text => /喂猫|喂鸟|给.{0,12}猫.{0,12}(水|食)|给.{0,12}鸟.{0,12}(水|食)/.test(text)
+      ? { kind: /猫/.test(text) ? "猫" : "鸟", action: "给小动物留下了食物或水" } : null,
+  },
+  {
+    id: "warmth-remains", theme: "leftbehind", label: "手里还留着一点暖",
+    reason: "两段原话都写到食物或饮料已经用完，手仍拿着温热的容器。",
+    read: text => /纸袋|杯/.test(text) && /吃完|喝完/.test(text) && /温热|余温|暖/.test(text) && /捏|捧|握|摸/.test(text)
+      ? { kind: /纸袋/.test(text) ? "纸袋" : "杯子", action: "食物或饮料用完后，手仍留在温热的容器上" } : null,
+  },
   {
     id: "prepared-unreleased", theme: "unspoken", label: "准备过，没有交出去",
     reason: "它们都描述了交出之前的准备，以及最后没有交出的结果。",
